@@ -4,7 +4,6 @@ authors = ["Juergen Fuhrmann <juergen.fuhrmann@wias-berlin.de>"]
 version = "0.1.0"
 
 [deps]
-MySubPackage = "68e60648-4d2a-4e1b-bf1c-379e0efff4a2"
 Pluto = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
