@@ -15,7 +15,7 @@ julia> Pkg.instantiate()
 
 
 - `notebooks/GridGallery.jl` : some example grids
-- `notebooks/1D.jl`: 1D double layer capacitance calculations based on DGLM model
+- `notebooks/Equilirium1D.jl`: 1D double layer capacitance calculations based on DGLM model
 - `src/equilibrium.jl` Implementation of DGLM modified Poisson-Boltzmann as part of the project-package
 
 

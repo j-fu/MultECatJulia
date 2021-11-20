@@ -58,10 +58,10 @@ hmin=0.01nm
 hmax=10*nm
 
 # ╔═╡ 2fdef862-536a-4401-8b5c-bc7e80b6a224
-X=geomspace(0,L,hmin,hmax)
+X=ExtendableGrids.geomspace(0,L,hmin,hmax)
 
 # ╔═╡ ac75d0a2-df48-48be-af40-dbb7b7670bf2
-grid=simplexgrid(X)
+grid=ExtendableGrids.simplexgrid(X)
 
 # ╔═╡ 1263e426-c510-47d4-a0c3-6023cf98c11f
 md"""
@@ -75,10 +75,12 @@ sys=create_equilibrium_system(grid)
 inival=unknowns(sys,inival=0)
 
 # ╔═╡ fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-vis=GridVisualizer(resolution=(600,200),legend=:rt)
+vis=GridVisualizer(resolution=(600,200),legend=:rt);vis
 
 # ╔═╡ 7899d9b8-0edc-443f-a5a9-96a01187ff74
-@bind voltage Slider(-Vmax:0.05:Vmax,show_value=true,default=0)
+md"""
+Change applied voltage. $(@bind voltage Slider(-Vmax:0.05:Vmax,show_value=true,default=0))
+"""
 
 # ╔═╡ 9545c38c-35d4-4adf-bd80-82af84e93564
 begin
@@ -132,7 +134,7 @@ end
 # ╔═╡ Cell order:
 # ╟─882dda23-63b9-4b1e-a04e-69071deff69a
 # ╠═60941eaa-1aea-11eb-1277-97b991548781
-# ╠═f36552fd-affd-44e0-83b5-3401459f0560
+# ╟─f36552fd-affd-44e0-83b5-3401459f0560
 # ╟─0f2a3eb0-9818-4bf8-9dde-ba28ea3dd2f5
 # ╟─5391c130-6706-4f06-8335-6474875fe210
 # ╠═7062de01-4986-45eb-8bcf-73ff23445dc2
@@ -148,9 +150,9 @@ end
 # ╠═5e4623cc-af45-4b48-a761-666dd0d98427
 # ╠═11e94e40-fbcf-4d03-ab86-09cc2e75c5c4
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
-# ╠═fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
+# ╟─fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
 # ╟─1765d933-c6a4-4302-b19e-98d27954c0b4
-# ╠═7899d9b8-0edc-443f-a5a9-96a01187ff74
+# ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
 # ╟─768bc478-339f-4bb5-8736-e0377d219744
 # ╠═c20f9bde-5ff5-47fe-b543-758159f8add5
 # ╠═d176f826-b8ec-4bdf-b75f-55f96e596a34
