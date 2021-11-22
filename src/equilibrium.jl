@@ -10,11 +10,12 @@ begin
 	using Pkg
 	Pkg.activate(joinpath(@__DIR__,".."))
     using PlutoUI
-	using Unitful
-	using DocStringExtensions
-    import PhysicalConstants.CODATA2018
 	using VoronoiFVM
 	using ExtendableGrids
+	using LinearAlgebra
+	using Unitful
+	using PhysicalConstants.CODATA2018
+
 	end
 	# If not run in Pluto, this file is included in MultECatJulia.jl as part of the package.
 end
@@ -41,7 +42,7 @@ Equation numbers refer to the paper.
 
 # ╔═╡ 87ac16f4-a4fc-4205-8fb9-e5459517e1b8
 md"""
-If not stated otherwise, all calculations and calculation results are an SI preferred  (base) units.
+If not stated otherwise, all calculations and calculation results are in coherent SI units.
 """
 
 # ╔═╡ 6cafe7d3-a017-49d7-ba39-5b686478b18e
@@ -51,45 +52,36 @@ md"""
 
 # ╔═╡ aaea99bb-777b-4941-8c96-501c29b34f2e
 html"""
-<h4> sibase() </h4>
-Transform unitful data to numerical values in preferred SI units.
+<h4> SI() </h4>
+Transform unitful data to numerical values in coherent SI units.
 See documentation for <a href="http://painterqubits.github.io/Unitful.jl/stable/conversion/#Unitful.upreferred" target="_blank"> upreferred </a> and 
 <a href="http://painterqubits.github.io/Unitful.jl/stable/conversion/#Unitful.ustrip" target=_blank> ustrip</a>.
 """
 
 # ╔═╡ 085fec09-8172-49ad-8773-8983e08037b8
-sibase(x)=Float64(ustrip(upreferred(x)));
+SI(x)=Float64(Unitful.ustrip(Unitful.upreferred(1*x)));
 
-# ╔═╡ 1bb99234-7bbe-48ca-9fb8-be932f8fd7a3
+# ╔═╡ 98de8928-5598-4497-8de8-fcc63a7946bc
 begin
-const N_A=sibase(CODATA2018.AvogadroConstant)
-const R=sibase(CODATA2018.MolarGasConstant)
-const e_0=sibase(CODATA2018.ElementaryCharge)
-const ε_0= sibase(CODATA2018.VacuumElectricPermittivity)
-const k_B= sibase(CODATA2018.BoltzmannConstant)
-end;
-
-# ╔═╡ 7fb7d7af-c14a-4ef1-b065-533d6741583b
-begin
-const m=sibase(1Unitful.m)
-const nm=sibase(1Unitful.nm)
-const cm=sibase(1Unitful.cm)
-const μm=sibase(1Unitful.μm)
-const K=sibase(1Unitful.K)
-const Pa=sibase(1Unitful.Pa)
-const MPa=sibase(1Unitful.MPa)
-const GPa=sibase(1Unitful.GPa)
-const μF=sibase(1Unitful.μF)
-const L=sibase(1Unitful.L)
-const V=sibase(1Unitful.V)
-const eV=V*e_0
-const mol=N_A
-end;
+	const N_A=SI(AvogadroConstant)
+	const k_B=SI(BoltzmannConstant)
+	const e_0=SI(ElementaryCharge)
+	const R=SI(MolarGasConstant)
+	const F=e_0*N_A
+	const ε_0=SI(VacuumElectricPermittivity)
+	const L=SI(Unitful.L)
+	const nm=SI(Unitful.nm)
+	const mol=N_A
+	const V=SI(Unitful.V)
+end
 
 # ╔═╡ 7d77ad32-3df6-4243-8bad-b8df4126e6ea
 md"""
 # Model data
 """
+
+# ╔═╡ 95223d5c-dc7e-4124-9a69-4fb4d2c07b80
+abstract type AbstractElectrolyteData end
 
 # ╔═╡ 4cabef42-d9f9-43fe-988e-7b54462dc775
 md"""
@@ -97,17 +89,19 @@ md"""
 """
 
 # ╔═╡ 86a7e69b-20f1-43d4-988f-3b9e5a603478
-struct DerivedEquilibriumData
+struct DerivedEquilibriumData<:AbstractElectrolyteData
 	v::Vector{Float64}   # ion volumes
 	y_E::Vector{Float64} # bulk ion mole fractions
 	y0_E::Float64        # bulk solvent mole fraction
+	U_T::Float64         # Temperature voltage k_BT/e0
 end
 
 # ╔═╡ 0d825f88-cd67-4368-90b3-29f316b72e6e
-mutable struct EquilibriumData
+mutable struct EquilibriumData<:AbstractElectrolyteData
 	N::Int64             # number of ionic species
 	T::Float64           # temperature
 	p_ref::Float64       # reference pressure
+	pscale::Float64      # pressure scale
 	E_ref::Float64       # reference voltage
 	v0::Float64          # solvent molecule volume
 	χ::Float64           # dielectric susceptibility 
@@ -127,6 +121,13 @@ md"""
 Create default dataset. Upon changing any entries, call `update_derived!()`
 """
 
+# ╔═╡ 40f900c7-e889-4de4-b820-85ae1255bc40
+function Base.show(io::IO, this::T) where {T<:AbstractElectrolyteData}
+    for name in fieldnames(typeof(this))
+        println(io,"$(name) = $(getfield(this,name))")
+    end
+end
+
 # ╔═╡ 30c6a176-935b-423f-9447-86f78746322f
 md"""
 #### l_debye(data)
@@ -138,6 +139,11 @@ L_{Debye}=\sqrt{ \frac{(1+χ)ε_0k_BT}{e_0^2n_E}}
 
 # ╔═╡ 00e536dc-34aa-4a1a-93de-4eb3f5e0a348
 L_Debye(data)=sqrt( (1+data.χ)*ε_0*k_B*data.T/(e_0^2*data.n_E[1]) );
+
+# ╔═╡ f3049938-2637-401d-9411-4d7be07c19ca
+md"""
+#### set_molarity!(data,M)
+"""
 
 # ╔═╡ a21545da-3b53-47af-b0c4-f253b37dc84f
 md"""
@@ -194,7 +200,7 @@ Ion molar fractions
 # ╔═╡ 188f67d8-2ae8-474c-8e58-68b8b4fde02e
 function y_α(φ,p,α, data)
 	η_φ=data.z[α]*e_0*(φ-data.E_ref)
-	η_p=data.derived.v[α]*(p-data.p_ref)
+	η_p=data.derived.v[α]*(p*data.pscale-data.p_ref)
 	data.derived.y_E[α]*exp( - (η_φ+η_p )/(k_B*data.T))
 end;
 
@@ -206,7 +212,7 @@ Solvent molar fraction
 """
 
 # ╔═╡ d7531d5f-fc2d-42b2-9cf9-6a737b0f0f8d
-y0(p,data)=data.derived.y0_E*exp( -data.v0*(p-data.p_ref)/(k_B*data.T));
+y0(p,data)=data.derived.y0_E*exp( -data.v0*(p*data.pscale-data.p_ref)/(k_B*data.T));
 
 # ╔═╡ f6f004a6-d71b-4813-a363-9f51dc37e42a
 md"""
@@ -275,6 +281,14 @@ definition of ``y_\alpha`` (32b):
 ```math
 ∑_α y_α(φ,p)=1
 ```
+However, direct usage of this equation leads to slow convergence of Newton's method.
+So we use
+
+```math
+\log\left(∑_α y_α(φ,p)\right)=0
+```
+
+instead.
 """
 
 # ╔═╡ 042a452a-1130-4a56-a1b9-b2674803e445
@@ -291,8 +305,8 @@ function spacecharge_and_ysum!(f,u,node,data)
 		sumyz+=data.z[α]*y
 		sumyv+=data.derived.v[α]*y
 	end
-	f[iφ]=-e_0*sumyz/sumyv
-	f[ip]=sumy-1.0
+	f[iφ]=-1*e_0*sumyz/sumyv
+	f[ip]=log(sumy) # this behaves much better with Newton's method
 end;
 
 # ╔═╡ 13fc2859-496e-4f6e-8b22-36d9d55768b8
@@ -322,43 +336,53 @@ function update_derived!(data)
 	n_E_all=1/data.v0
 	N=length(data.κ)
 	for α=1:N
-		n_E_all-=data.κ[α]*data.n_E[α]
+		n_E_all+=data.κ[α]*data.n_E[α]
 	end
 	y_E=data.n_E/n_E_all
 	y0_E=(1/data.v0)/n_E_all
-	data.derived=DerivedEquilibriumData(v,y_E,y0_E)
+	U_T=k_B*data.T/e_0
+	data.derived=DerivedEquilibriumData(v,y_E,y0_E,U_T)
 	data
 end;
 
 # ╔═╡ 5cd5a8a9-ad67-42d9-a998-34c038ef9688
 function default_data(;n_E=0.1*mol/L,nref=55.508*mol/L)
 	data=EquilibriumData()
+	data.T=298.15*SI(Unitful.K)
 	data.μ_e=[0.0]
-	data.N=2
-	data.T=298.15*K
-    data.p_ref=1.0e5*Pa
-	data.E_ref=0
+    data.p_ref=1.0e5*SI(Unitful.Pa)
+	data.pscale=1.0*SI(Unitful.GPa)
+	data.E_ref=0.0
     data.v0=1.0/nref
 	data.χ=15
 	data.n_E=[n_E,n_E]
 	data.κ=[10,10]
 	data.z=[-1,1]
+	data.N=2
 	update_derived!(data)
 	data
 end;
 
-# ╔═╡ 0f4f3598-808d-4e01-bf4a-99ba079940a6
+# ╔═╡ 75d44285-113d-4f62-a704-a0ee038be1f2
 default_data()
 
 # ╔═╡ 1065b3e0-60bf-497c-b7fb-c5a065737f77
-L_Debye(default_data(n_E=0.01*mol/L))/nm
+L_Debye(default_data(n_E=0.01mol/L))/nm
+
+# ╔═╡ 5d6340c4-2ddd-429b-a60b-3de5570a7398
+	function set_molarity!(data,M_E)	
+		n_E=M_E*mol/L
+		data.n_E=[n_E,n_E]
+		update_derived!(data)
+	end
 
 # ╔═╡ fe704fb4-d07c-4591-b834-d6cf2f4f7075
 let
-	data=default_data(n_E=0.01*mol/L)
+	data=default_data()
+	set_molarity!(data,0.01)
 	data.χ=78.49-1
 	update_derived!(data)
-    cdl0=Cdl0(data)/(μF/cm^2)
+    cdl0=Cdl0(data)/SI(u"μF/cm^2")
 	@assert cdl0 ≈ 22.846691848825248
 end
 
@@ -446,9 +470,10 @@ md"""
 """
 
 # ╔═╡ 85fa321c-dd93-4ac3-96da-1e1bff80970a
-function solve_equilibrium_system(sys;inival=unknowns(sys,inival=0),damp=0.1,log=true)
+function solve_equilibrium_system(sys;inival=unknowns(sys,inival=0),damp=0.1,verbose=false,log=true)
 	c=NewtonControl()
 	c.damp_initial=damp
+	c.verbose=verbose
 	VoronoiFVM.solve(inival,sys,control=c,log=log)
 end;
 
@@ -475,7 +500,7 @@ Obtain pressure from solution
 """
 
 # ╔═╡ 2afd54ca-4240-4f07-b38a-242ba0485b45
-calc_p(sol,sys)=sol[ip,:];
+calc_p(sol,sys)=sol[ip,:]*sys.physics.data.pscale;
 
 # ╔═╡ 55bd7b9a-a191-4a0b-9c6b-13733be5023e
 md"""
@@ -571,47 +596,66 @@ Calculate double layer capacitance. Return vector of voltages `V` and vector of 
 """
 
 # ╔═╡ 77f49da5-ffd2-4148-93a6-f45382ba6d91
-function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V)
-	data=sys.physics.data
-	data.n_E .= molarity*mol
-	update_derived!(data)
-	apply_voltage!(sys,0)
-	inival=unknowns(sys,inival=0)
-	inival=solve(inival,sys)
-	vstep=vmax/(nsteps-1)
-	c=VoronoiFVM.NewtonControl()
-	c.damp_growth=1.2
-	c.verbose=false
-	c.tol_round=1.0e-10
-	c.max_round=3
-
-	function rundlcap(dir)
-		V=zeros(0)
-		C=zeros(0)
+function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
+	          verbose=false,max_lureuse=0)
+    data=sys.physics.data
+    set_molarity!(data,molarity)
+    update_derived!(data)
+    apply_voltage!(sys,0)
+    
+    c=VoronoiFVM.NewtonControl()
+    #	c.damp_growth=1.1
+    c.verbose=verbose
+    c.max_lureuse=max_lureuse
+    c.tol_round=1.0e-10
+    c.max_round=3
+    c.damp_initial=0.01
+    c.damp_growth=2
+    c.umfpack_pivot_tolerance=0.5
+    
+    inival=unknowns(sys,inival=0)
+    inival=solve(inival,sys,control=c)
+    vstep=vmax/(nsteps-1)
+    
+    c.damp_initial=1
+    function rundlcap(dir)
+	volts=zeros(0)
+	caps=zeros(0)
 	sol=copy(inival)
 	oldsol=copy(inival)
 	volt=0.0
 	for iv=1:nsteps
-		apply_voltage!(sys,volt)
-		
-		c.damp_initial=0.1
-		solve!(sol,oldsol,sys,control=c)
-		oldsol.=sol
-		Q=calc_QBL(sol,sys)
-		apply_voltage!(sys,volt+dir*δV)
-		c.damp_initial=1
+	    apply_voltage!(sys,volt)
+	    verbose && println("bias:")
+	    c.damp_initial=1
 	    solve!(sol,oldsol,sys,control=c)
+	    verbose && @show norm(sol-oldsol,Inf)
+	    oldsol.=sol
+            
+	    if false
+		verbose && println("biasx:")
+		c.damp_initial=1
+		solve!(sol,oldsol,sys,control=c)
+		verbose && @show norm(sol-oldsol,Inf)
 		oldsol.=sol
-		Qδ=calc_QBL(sol,sys)
-	    push!(C,(Q-Qδ)/(dir*δV))
-		push!(V,volt)
-		volt+=dir*vstep
+	    end
+	    Q=calc_QBL(sol,sys)
+	    apply_voltage!(sys,volt+dir*δV)
+		verbose && println("dlcap:")
+	    c.damp_initial=1
+	    solve!(sol,oldsol,sys,control=c)
+	    verbose && @show norm(sol-oldsol,Inf)
+	    oldsol.=sol
+	    Qδ=calc_QBL(sol,sys)
+	    push!(caps,(Q-Qδ)/(dir*δV))
+	    push!(volts,volt)
+	    volt+=dir*vstep
 	end
-		V,C
-	end
-	Vf,Cf=rundlcap(1)
-	Vr,Cr=rundlcap(-1)
-	vcat(reverse(Vr),Vf),vcat(reverse(Cr),Cf)
+	volts,caps
+    end
+    Vf,Cf=rundlcap(1)
+    Vr,Cr=rundlcap(-1)
+    vcat(reverse(Vr),Vf),vcat(reverse(Cr),Cf)
 end
 
 # ╔═╡ Cell order:
@@ -623,18 +667,21 @@ end
 # ╟─6cafe7d3-a017-49d7-ba39-5b686478b18e
 # ╟─aaea99bb-777b-4941-8c96-501c29b34f2e
 # ╠═085fec09-8172-49ad-8773-8983e08037b8
-# ╠═1bb99234-7bbe-48ca-9fb8-be932f8fd7a3
-# ╠═7fb7d7af-c14a-4ef1-b065-533d6741583b
+# ╠═98de8928-5598-4497-8de8-fcc63a7946bc
 # ╟─7d77ad32-3df6-4243-8bad-b8df4126e6ea
+# ╠═95223d5c-dc7e-4124-9a69-4fb4d2c07b80
 # ╟─4cabef42-d9f9-43fe-988e-7b54462dc775
 # ╠═86a7e69b-20f1-43d4-988f-3b9e5a603478
 # ╠═0d825f88-cd67-4368-90b3-29f316b72e6e
 # ╟─308b8da3-21bd-499b-8e19-214ef74525d8
 # ╠═5cd5a8a9-ad67-42d9-a998-34c038ef9688
-# ╠═0f4f3598-808d-4e01-bf4a-99ba079940a6
+# ╠═40f900c7-e889-4de4-b820-85ae1255bc40
+# ╠═75d44285-113d-4f62-a704-a0ee038be1f2
 # ╟─30c6a176-935b-423f-9447-86f78746322f
 # ╠═00e536dc-34aa-4a1a-93de-4eb3f5e0a348
 # ╠═1065b3e0-60bf-497c-b7fb-c5a065737f77
+# ╟─f3049938-2637-401d-9411-4d7be07c19ca
+# ╠═5d6340c4-2ddd-429b-a60b-3de5570a7398
 # ╟─a21545da-3b53-47af-b0c4-f253b37dc84f
 # ╠═1d22b09e-99c1-4026-9505-07bdffc98582
 # ╟─5a210961-19fc-40be-a5f6-033a80f1414d
