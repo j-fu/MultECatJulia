@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.1
+# v0.17.2
 
 using Markdown
 using InteractiveUtils
@@ -27,8 +27,15 @@ begin
 	using VoronoiFVM
 	import DrWatson: plotsdir
 	using Colors
-	default_plotter!(PyPlot)
 	using MultECatJulia
+	PyPlot.svg(true)
+end
+
+# ╔═╡ 14f8c67a-759a-4646-811c-01d03e3cf726
+if isdefined(Main,:PlutoRunner)
+	using PlutoVista
+	default_plotter!(PlutoVista)
+	
 end
 
 # ╔═╡ b43533f6-a948-418c-8539-2d54aa8e5943
@@ -99,7 +106,7 @@ sys=create_equilibrium_system(grid,data)
 inival=unknowns(sys,inival=0);
 
 # ╔═╡ fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-vis=GridVisualizer(resolution=(600,200),legend=:rt);vis
+vis=GridVisualizer(resolution=(600,200),legend=:rt,Plotter=PlutoVista,limits=(-55,55));vis
 
 # ╔═╡ 7899d9b8-0edc-443f-a5a9-96a01187ff74
 md"""
@@ -142,7 +149,7 @@ molarities=[0.001,0.01,0.1,1]
 
 # ╔═╡ d176f826-b8ec-4bdf-b75f-55f96e596a34
 let 
-	vis=GridVisualizer(resolution=(500,300),legend=:rt,clear=true,ylabel="C_dl/(μF/cm^2)")
+	vis=GridVisualizer(resolution=(500,300),legend=:rt,clear=true,ylabel="C_dl/(μF/cm^2)",Plotter=PyPlot)
 	hmol=1/length(molarities)
 	for imol=1:length(molarities)
 		c=RGB(1-imol*hmol,0,imol*hmol)
@@ -158,6 +165,7 @@ end
 # ╔═╡ Cell order:
 # ╟─882dda23-63b9-4b1e-a04e-69071deff69a
 # ╠═60941eaa-1aea-11eb-1277-97b991548781
+# ╠═14f8c67a-759a-4646-811c-01d03e3cf726
 # ╟─f36552fd-affd-44e0-83b5-3401459f0560
 # ╟─0f2a3eb0-9818-4bf8-9dde-ba28ea3dd2f5
 # ╟─5bce5b30-b5fd-4e13-8b20-8218edaa6c60
@@ -174,11 +182,11 @@ end
 # ╠═d0776266-c208-4237-99c8-1364527eaeb1
 # ╠═bb64df89-c43c-43c8-9b0f-a19cc8611414
 # ╠═1ab27251-0999-49a7-a970-29e70d8fd800
-# ╠═9545c38c-35d4-4adf-bd80-82af84e93564
+# ╟─9545c38c-35d4-4adf-bd80-82af84e93564
 # ╠═5e4623cc-af45-4b48-a761-666dd0d98427
 # ╠═11e94e40-fbcf-4d03-ab86-09cc2e75c5c4
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
-# ╟─fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
+# ╠═fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
 # ╟─1765d933-c6a4-4302-b19e-98d27954c0b4
 # ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
 # ╟─768bc478-339f-4bb5-8736-e0377d219744
