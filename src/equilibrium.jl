@@ -619,20 +619,19 @@ end;
 
 # ╔═╡ 7bf3a130-3b47-428e-916f-4a0ec1237844
 function create_equilibrium_pp_system(grid,
-		 data::EquilibriumData=default_data();
-		 Γ_bulk=0)
-	update_derived!(data)
-
-	sys=VoronoiFVM.System(grid;data=data,flux=poisson_and_p_flux!,
-		reaction=spacecharge!,species=[iφ,ip])
-	if Γ_bulk>0
-		logysum!(y,p)=y[1]=log(MultECatJulia.ysum(0.0,p[1],data))
-		res=nlsolve(logysum!,[0.0];autodiff=:forward,method=:newton)
-		
-		boundary_dirichlet!(sys,iφ,Γ_bulk,0.0)
-		boundary_dirichlet!(sys,ip,Γ_bulk,res.zero[1])
-	end
-	apply_voltage!(sys,0)
+		                      data::EquilibriumData=default_data();
+		                      Γ_bulk=0)
+    update_derived!(data)
+    
+    sys=VoronoiFVM.System(grid;data=data,flux=poisson_and_p_flux!,
+		          reaction=spacecharge!,species=[iφ,ip])
+    if Γ_bulk>0
+	logysum!(y,p)=y[1]=log(MultECatJulia.ysum(0.0,p[1],data))
+	res=nlsolve(logysum!,[0.0];autodiff=:forward,method=:newton,xtol=1.0e-10,ftol=1.0e-20)
+	boundary_dirichlet!(sys,iφ,Γ_bulk,0.0)
+	boundary_dirichlet!(sys,ip,Γ_bulk,res.zero[1])
+    end
+    apply_voltage!(sys,0)
 end;
 
 # ╔═╡ 48670f54-d303-4c3a-a191-06e6592a2e0a

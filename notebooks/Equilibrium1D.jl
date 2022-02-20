@@ -163,7 +163,8 @@ end;
 plot!(vis,sol_sy,sys_sy)
 
 # ╔═╡ a95d311c-7f31-456b-974f-526948eef169
-scalarplot!(vis1,grid,ysum(sys_pp,sol_pp),resolution=(600,200),show=true,title="Molar fraction sum constraint for pressure Poisson")
+scalarplot!(vis1,grid,ysum(sys_pp,sol_pp),xlimits=(0,5nm),limits=(0.975,1.025),show=true,
+	title="Molar fraction sum constraint for pressure Poisson at $(voltage)V")
 
 # ╔═╡ 768bc478-339f-4bb5-8736-e0377d219744
 md"""
@@ -235,7 +236,7 @@ capsplot(sys_pp,molarities)
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
 # ╟─fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
 # ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
-# ╟─fc825252-9462-4a42-bd60-ee3795943285
+# ╠═fc825252-9462-4a42-bd60-ee3795943285
 # ╠═1765d933-c6a4-4302-b19e-98d27954c0b4
 # ╠═dcec8754-282f-42c5-9a27-39c07f735af7
 # ╠═a95d311c-7f31-456b-974f-526948eef169
