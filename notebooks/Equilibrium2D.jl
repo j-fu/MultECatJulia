@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.1
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
@@ -89,7 +89,7 @@ md"""
 
 # ╔═╡ 589ed15d-f8af-4921-8e49-82449170ef5a
 begin
-	data=default_data()
+	data=EquilibriumData()
 	data.κ .= κ
 	data.z .= [-1,1]
 	data.μ_e= [ i%2==0 ? μ_e : -μ_e for i=1:ngrain]
@@ -97,11 +97,16 @@ begin
 	data
 end
 
+# ╔═╡ 074dcc08-0fe8-4585-a17b-9133e80b3f4f
+md"""
+__Pressure Poisson ?__ $(@bind ppoisson CheckBox())
+"""
+
 # ╔═╡ bb64df89-c43c-43c8-9b0f-a19cc8611414
-sys=create_equilibrium_system(grid,data)
+sys= ppoisson ? create_equilibrium_pp_system(grid,data;Γ_bulk=ngrain+1) : create_equilibrium_system(grid,data)
 
 # ╔═╡ 1ab27251-0999-49a7-a970-29e70d8fd800
-inival=unknowns(sys,inival=0)
+inival=unknowns(sys,inival=0);
 
 # ╔═╡ fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
 vis=GridVisualizer(resolution=(600,200),legend=:rt,dim=2);vis
@@ -114,12 +119,12 @@ Change applied voltage: $(@bind voltage Slider(-Vmax:0.05:Vmax, show_value=true,
 # ╔═╡ 9545c38c-35d4-4adf-bd80-82af84e93564
 begin
 	apply_voltage!(sys,voltage)
-	sol,history=solve_equilibrium_system(sys,inival=inival)
-	sol
+	sol=solve(sys,inival=inival,log=true,damp_initial=0.1)
+	hist=history(sys)
 end
 
 # ╔═╡ 5e4623cc-af45-4b48-a761-666dd0d98427
-history
+scalarplot(hist,resolution=(500,200),yscale=:log)
 
 # ╔═╡ 11e94e40-fbcf-4d03-ab86-09cc2e75c5c4
 cmol=calc_cmol(sol,sys)
@@ -173,7 +178,7 @@ begin
 end
 
 # ╔═╡ d04af3dd-d489-4f93-bdac-32b786c1723b
-sys1d=create_equilibrium_system(grid1d,data1D)
+sys1d=  ppoisson ?  create_equilibrium_pp_system(grid1d,data1D,Γ_bulk=2) : create_equilibrium_system(grid1d,data1D) 
 
 # ╔═╡ b769149c-2a51-4460-8281-6b70069842db
 μ_e1=μ_e
@@ -226,6 +231,7 @@ end
 # ╠═2fdef862-536a-4401-8b5c-bc7e80b6a224
 # ╟─1263e426-c510-47d4-a0c3-6023cf98c11f
 # ╠═589ed15d-f8af-4921-8e49-82449170ef5a
+# ╟─074dcc08-0fe8-4585-a17b-9133e80b3f4f
 # ╠═bb64df89-c43c-43c8-9b0f-a19cc8611414
 # ╠═1ab27251-0999-49a7-a970-29e70d8fd800
 # ╠═9545c38c-35d4-4adf-bd80-82af84e93564

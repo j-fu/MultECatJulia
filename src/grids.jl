@@ -146,7 +146,8 @@ function polycrystal_grid2d(;W=50*nm,H=10*nm, hgmin=0.5*nm, hzmin=0.1*nm,hzmax=2
     end
     Z=geomspace(0,H,hzmin,hzmax)
     grid=simplexgrid(Xgrain,Z)
-    bfacemask!(grid,[0,0],[W,H],allow_new=false,ngrain+1)
+    bfacemask!(grid,[0,0],[W,H],allow_new=false,ngrain+2)
+    bfacemask!(grid,[0,H],[W,H],allow_new=false,ngrain+1)
     if ngrain==1
 	bfacemask!(grid,[0,0],[W,0],allow_new=false,1)
     else

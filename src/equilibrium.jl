@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.2
+# v0.18.0
 
 using Markdown
 using InteractiveUtils
@@ -14,8 +14,9 @@ begin
 	using ExtendableGrids
 	using LinearAlgebra
 	using Unitful
+	using NLsolve
+	using Parameters
 	using PhysicalConstants.CODATA2018
-
 	end
 	# If not run in Pluto, this file is included in MultECatJulia.jl as part of the package.
 end
@@ -80,53 +81,10 @@ md"""
 # Model data
 """
 
-# ╔═╡ 95223d5c-dc7e-4124-9a69-4fb4d2c07b80
-abstract type AbstractElectrolyteData end
-
 # ╔═╡ 4cabef42-d9f9-43fe-988e-7b54462dc775
 md"""
 #### EquilibriumData
 """
-
-# ╔═╡ 86a7e69b-20f1-43d4-988f-3b9e5a603478
-struct DerivedEquilibriumData<:AbstractElectrolyteData
-	v::Vector{Float64}   # ion volumes
-	y_E::Vector{Float64} # bulk ion mole fractions
-	y0_E::Float64        # bulk solvent mole fraction
-	U_T::Float64         # Temperature voltage k_BT/e0
-end
-
-# ╔═╡ 0d825f88-cd67-4368-90b3-29f316b72e6e
-mutable struct EquilibriumData<:AbstractElectrolyteData
-	N::Int64             # number of ionic species
-	T::Float64           # temperature
-	p_ref::Float64       # reference pressure
-	pscale::Float64      # pressure scale
-	E_ref::Float64       # reference voltage
-	v0::Float64          # solvent molecule volume
-	χ::Float64           # dielectric susceptibility 
-	z::Vector{Float64}   # ion charge numbers
-	κ::Vector{Float64}   # ion solvation numbers
-	n_E::Vector{Float64} # bulk ion number densities
-	μ_e::Vector{Float64} # grain facet electron chemical potential
-	derived::DerivedEquilibriumData # derived data
-	EquilibriumData()=new()
-end
-
-# ╔═╡ 308b8da3-21bd-499b-8e19-214ef74525d8
-md"""
-
-#### default_data()
-
-Create default dataset. Upon changing any entries, call `update_derived!()`
-"""
-
-# ╔═╡ 40f900c7-e889-4de4-b820-85ae1255bc40
-function Base.show(io::IO, this::T) where {T<:AbstractElectrolyteData}
-    for name in fieldnames(typeof(this))
-        println(io,"$(name) = $(getfield(this,name))")
-    end
-end
 
 # ╔═╡ 30c6a176-935b-423f-9447-86f78746322f
 md"""
@@ -144,6 +102,13 @@ L_Debye(data)=sqrt( (1+data.χ)*ε_0*k_B*data.T/(e_0^2*data.n_E[1]) );
 md"""
 #### set_molarity!(data,M)
 """
+
+# ╔═╡ 5d6340c4-2ddd-429b-a60b-3de5570a7398
+	function set_molarity!(data,M_E)	
+		n_E=M_E*mol/L
+		data.molarity=n_E
+		data.n_E=[n_E,n_E]
+	end
 
 # ╔═╡ a21545da-3b53-47af-b0c4-f253b37dc84f
 md"""
@@ -200,8 +165,8 @@ Ion molar fractions
 # ╔═╡ 188f67d8-2ae8-474c-8e58-68b8b4fde02e
 function y_α(φ,p,α, data)
 	η_φ=data.z[α]*e_0*(φ-data.E_ref)
-	η_p=data.derived.v[α]*(p*data.pscale-data.p_ref)
-	data.derived.y_E[α]*exp( - (η_φ+η_p )/(k_B*data.T))
+	η_p=data.v[α]*(p*data.pscale-data.p_ref)
+	data.y_E[α]*exp( - (η_φ+η_p )/(k_B*data.T))
 end;
 
 # ╔═╡ f70eed13-a6c2-4d54-9f30-113367afaf7d
@@ -212,7 +177,7 @@ Solvent molar fraction
 """
 
 # ╔═╡ d7531d5f-fc2d-42b2-9cf9-6a737b0f0f8d
-y0(p,data)=data.derived.y0_E*exp( -data.v0*(p*data.pscale-data.p_ref)/(k_B*data.T));
+y0(p,data)=data.y0_E*exp( -data.v0*(p*data.pscale-data.p_ref)/(k_B*data.T));
 
 # ╔═╡ f6f004a6-d71b-4813-a363-9f51dc37e42a
 md"""
@@ -238,7 +203,7 @@ end;
 
 # ╔═╡ 824c610b-6e5e-48a3-be37-19104f52d1d9
 md"""
-### Space charge expression
+#### Space charge expression
 """
 
 # ╔═╡ 2e11ce81-7d0d-498f-9ddd-7d4d836ab42f
@@ -271,6 +236,33 @@ q(φ,p)&=e_0∑\limits_α z_αn_α = ne_0∑\limits_α z_αy_α\\
 ```
 """
 
+# ╔═╡ b07246b8-aec5-4161-8879-8cefb350aced
+function spacecharge(φ,p,data)
+ 	y=y0(p,data)
+	sumyz=zero(eltype(p))
+	sumyv=data.v0*y
+	for α=1:data.N
+		y=y_α(φ,p,α,data)
+		sumyz+=data.z[α]*y
+		sumyv+=data.v[α]*y
+	end
+	e_0*sumyz/sumyv
+end
+
+# ╔═╡ b41838bb-3d5b-499c-9eb5-137c252ae366
+md"""
+#### Sum of mole fractions
+"""
+
+# ╔═╡ a468f43a-aa20-45dc-9c21-77f5adf2d700
+function ysum(φ,p,data)
+	sumy=y0(p,data)
+	for α=1:data.N
+		sumy+=y_α(φ,p,α,data)
+	end
+	sumy
+end
+
 # ╔═╡ 978bf1d3-4758-4d01-b1e5-8aed1db9024f
 md"""
 #### spacecharge\_and\_ysum!(f,u,node,data)
@@ -290,24 +282,6 @@ So we use
 
 instead.
 """
-
-# ╔═╡ 042a452a-1130-4a56-a1b9-b2674803e445
-function spacecharge_and_ysum!(f,u,node,data)
-	φ=u[iφ]
-	p=u[ip]
-	y=y0(p,data)
-	sumy=y
-	sumyz=zero(eltype(u))
-	sumyv=data.v0*y
-	for α=1:data.N
-		y=y_α(φ,p,α,data)
-		sumy+=y
-		sumyz+=data.z[α]*y
-		sumyv+=data.derived.v[α]*y
-	end
-	f[iφ]=-1*e_0*sumyz/sumyv
-	f[ip]=log(sumy) # this behaves much better with Newton's method
-end;
 
 # ╔═╡ 13fc2859-496e-4f6e-8b22-36d9d55768b8
 md"""
@@ -331,60 +305,63 @@ y_α^E&=\frac{n_α^E}{n^E}
 """
 
 # ╔═╡ 32db42f3-5084-4908-9b53-59291b6133c5
-function update_derived!(data)
-	v=(1.0.+data.κ).*data.v0
-	n_E_all=1/data.v0
-	N=length(data.κ)
+function derived(κ,v0,n_E,T)
+	v=(1.0.+κ).*v0
+	n_E_all=1/v0
+	N=length(κ)
 	for α=1:N
-		n_E_all+=data.κ[α]*data.n_E[α]
+		n_E_all+=κ[α]*n_E[α]
 	end
-	y_E=data.n_E/n_E_all
-	y0_E=(1/data.v0)/n_E_all
-	U_T=k_B*data.T/e_0
-	data.derived=DerivedEquilibriumData(v,y_E,y0_E,U_T)
-	data
+	y_E=n_E/n_E_all
+	y0_E=(1/v0)/n_E_all
+	U_T=k_B*T/e_0
+	(;v,y_E,y0_E,U_T)
 end;
 
-# ╔═╡ 5cd5a8a9-ad67-42d9-a998-34c038ef9688
-function default_data(;n_E=0.1*mol/L,nref=55.508*mol/L)
-	data=EquilibriumData()
-	data.T=298.15*SI(Unitful.K)
-	data.μ_e=[0.0]
-    data.p_ref=1.0e5*SI(Unitful.Pa)
-	data.pscale=1.0*SI(Unitful.GPa)
-	data.E_ref=0.0
-    data.v0=1.0/nref
-	data.χ=15
-	data.n_E=[n_E,n_E]
-	data.κ=[10,10]
-	data.z=[-1,1]
-	data.N=2
-	update_derived!(data)
-	data
-end;
+# ╔═╡ 0d825f88-cd67-4368-90b3-29f316b72e6e
+@with_kw mutable struct EquilibriumData
+	N::Int64         = 2                     # number of ionic species
+	T::Float64       = 298.15*SI(Unitful.K)  # temperature
+	p_ref::Float64   = 1.0e5*SI(Unitful.Pa)  # referece pressure
+	pscale::Float64  = 1.0*SI(Unitful.GPa)   # pressure scaling nparameter
+	E_ref::Float64   = 0.0*SI(Unitful.V)     # reference voltage
+	n0_ref::Float64  = 55.508*mol/L          # solvent molarity
+ 	v0::Float64      = 1/n0_ref              # solvent molecule volume
+	χ::Float64       = 15                    # dielectric susceptibility 
+	z::Vector{Int}   = [-1,1]                # ion charge numbers
+	κ::Vector{Int}   = [10,10]               # ion solvation numbers
+	molarity::Float64 = 0.1*mol/L
+	n_E::Vector{Float64} = [molarity,molarity]  # bulk ion number densities
+	μ_e::Vector{Float64} = [0.0]             # grain facet electron chemical potential
+	
+	v::Vector{Float64}  = derived(κ,v0,n_E,T).v # ion volumes
+	y_E::Vector{Float64} = derived(κ,v0,n_E,T).y_E # bulk ion mole fractions
+	y0_E::Float64 = derived(κ,v0,n_E,T).y0_E       # bulk solvent mole fraction
+	U_T::Float64   =  derived(κ,v0,n_E,T).U_T     # Temperature voltage k_BT/e0
+end
 
 # ╔═╡ 75d44285-113d-4f62-a704-a0ee038be1f2
-default_data()
+EquilibriumData()
 
 # ╔═╡ 1065b3e0-60bf-497c-b7fb-c5a065737f77
-L_Debye(default_data(n_E=0.01mol/L))/nm
-
-# ╔═╡ 5d6340c4-2ddd-429b-a60b-3de5570a7398
-	function set_molarity!(data,M_E)	
-		n_E=M_E*mol/L
-		data.n_E=[n_E,n_E]
-		update_derived!(data)
-	end
+L_Debye(EquilibriumData(molarity=0.01mol/L))/nm
 
 # ╔═╡ fe704fb4-d07c-4591-b834-d6cf2f4f7075
 let
-	data=default_data()
+	data=EquilibriumData()
 	set_molarity!(data,0.01)
 	data.χ=78.49-1
-	update_derived!(data)
     cdl0=Cdl0(data)/SI(u"μF/cm^2")
 	@assert cdl0 ≈ 22.846691848825248
 end
+
+# ╔═╡ 3d9a47b8-2754-4a21-84a4-39cbeab12286
+function update_derived!(data)
+@unpack κ,v0,n_E,T = data
+v,y_E,y0_E,U_T=derived(κ,v0,n_E,T)
+@pack! data=v,y_E,y0_E,U_T 
+end
+
 
 # ╔═╡ 243d27b5-a1b8-4127-beec-d5643ad07855
 md"""
@@ -453,30 +430,6 @@ function apply_voltage!(sys,E)
 	sys
 end;
 
-# ╔═╡ 6e3dbf34-c1c9-460b-9546-b2ee8ee99d68
-function create_equilibrium_system(grid,data::EquilibriumData=default_data())
-	update_derived!(data)
-physics=VoronoiFVM.Physics(data=data,flux=poisson_flux!,reaction=spacecharge_and_ysum!)
-sys=VoronoiFVM.System(grid,physics,unknown_storage=:dense)
-nreg=num_cellregions(grid)	
-enable_species!(sys,iφ,1:nreg)
-enable_species!(sys,ip,1:nreg)
-apply_voltage!(sys,0)
-end;
-
-# ╔═╡ 768c3dcd-6832-4270-aa3e-0849c7a0095d
-md"""
-#### solve\_equilibrium\_system(sys; inival, damp, log)
-"""
-
-# ╔═╡ 85fa321c-dd93-4ac3-96da-1e1bff80970a
-function solve_equilibrium_system(sys;inival=unknowns(sys,inival=0),damp=0.1,verbose=false,log=true)
-	c=NewtonControl()
-	c.damp_initial=damp
-	c.verbose=verbose
-	VoronoiFVM.solve(inival,sys,control=c,log=log)
-end;
-
 # ╔═╡ 93428d11-a3dc-4e29-ae6d-48ba37082c74
 md"""
 # Postprocessing
@@ -517,9 +470,20 @@ function c_num!(c,φ,p, data)
 	sumyv=data.v0*y
 	for α=1:data.N
 		c[α]=y_α(φ,p,α,data)
-		sumyv+=c[α]*data.derived.v[α]
+		sumyv+=c[α]*data.v[α]
 	end
 	c./=sumyv
+end;
+
+# ╔═╡ 97c5942c-8eb4-4b5c-8951-87ac0c9f396d
+function c0_num!(c,φ,p, data)
+	y=y0(p,data)
+	sumyv=data.v0*y
+	for α=1:data.N
+		c[α]=y_α(φ,p,α,data)
+		sumyv+=c[α]*data.v[α]
+	end
+	y/sumyv
 end;
 
 # ╔═╡ 0c54efd0-f279-4dc6-8b00-ba092dd13f44
@@ -541,6 +505,19 @@ function calc_cnum(sol,sys)
 	conc
 end;
 
+# ╔═╡ 24910762-7d56-446b-a758-d8e830fe9a09
+function calc_c0num(sol,sys)
+	data=sys.physics.data
+	grid=sys.grid
+	nnodes=num_nodes(grid)
+	c0=zeros(nnodes)
+	conc=zeros(data.N)
+	for i=1:nnodes
+	  @views c0[i]=c0_num!(conc,sol[iφ,i],sol[ip,i],data)
+	end
+	c0
+end;
+
 # ╔═╡ 9fe3ca93-c051-426e-8b9a-cc59f59319ad
 md"""
 #### calc_cmol(sol,sys)
@@ -551,6 +528,9 @@ Obtain ion  molarities (molar densities in mol/L)  from system
 # ╔═╡ 2ee34d76-7238-46c2-94d1-a40d8b017af6
 calc_cmol(sol,sys)=calc_cnum(sol,sys)/(mol/L);
 
+# ╔═╡ 79cc671b-ef6e-42da-8641-61e43f221cb1
+calc_c0mol(sol,sys)=calc_c0num(sol,sys)/(mol/L);
+
 # ╔═╡ f4b2f509-0769-4df7-956e-e8bfc9ccd89a
 md"""
 #### calc_QBL(sol,sys)
@@ -559,9 +539,6 @@ Obtain boundary layer charge (35)
 Q^{BL}(E)=-\frac{1}{Σ} ∫_{Ω_E} q dx
 ```
 """
-
-# ╔═╡ 49466829-9459-4dc8-85cc-c67460e290d2
-calc_QBL(sol,sys)=VoronoiFVM.integrate(sys,spacecharge_and_ysum!,sol)[iφ,1]
 
 # ╔═╡ 65955950-2879-4b8c-bf73-d63e07d2ad96
 md"""
@@ -595,6 +572,108 @@ md"""
 Calculate double layer capacitance. Return vector of voltages `V` and vector of double layer capacitances `C`.
 """
 
+# ╔═╡ 7a607454-7b75-4313-920a-2dbdad258015
+md"""
+# The pressure Poisson equation
+"""
+
+# ╔═╡ 9cb8324c-896f-40f8-baa8-b7d47a93e9f5
+md"""
+An alternaive possibility to handle the pressure has been introduced in 
+
+[J. Fuhrmann, “Comparison and numerical treatment of generalised Nernst–Planck models,” Computer Physics Communications, vol. 196, pp. 166–178, 2015.](https://dx.doi.org/10.1016/j.cpc.2015.06.004).
+
+Starting with the momentum balance in mechanical equilibrium
+```math
+	\nabla p = -q\nabla \varphi
+```
+by taking the divergence on both sides of the equation, one derives the pressure Poisson problem
+```math
+\begin{aligned}
+	-\Delta p &= \nabla\cdot q\nabla \varphi & \text{in}\; \Omega\\
+      p&=p_{bulk} & \text{on}\; \Gamma_{bulk}\\
+	(\nabla p + q\nabla \varphi)\cdot \vec n &=0 & \text{on}\; \partial\Omega\setminus\Gamma_{bulk}\\
+\end{aligned}
+```
+"""
+
+# ╔═╡ 003a5c0b-17c7-4407-ad23-21c0ac000fd4
+md"""
+The bulk Dirichlet boundary condition for the pressure is necessary to make the solution unique. It is reasonable to set the ``\varphi`` to a bulk value at ``\Gamma_{bulk}`` as well, and to calculate ``p_{bulk}`` from the molar fraction sum constraint.
+"""
+
+# ╔═╡ e1c13f1e-5b67-464b-967b-25e3a93e33d9
+function spacecharge!(f,u,node,data)
+	φ=u[iφ]
+	p=u[ip]
+	f[iφ]=-spacecharge(u[iφ],u[ip],data)
+end;
+
+# ╔═╡ 64e47917-9c61-4d64-a6a1-c6e8c7b28c59
+function poisson_and_p_flux!(f,u,edge,data)
+	f[iφ]=(1.0+data.χ)*ε_0*(u[iφ,1]-u[iφ,2])
+	q1=spacecharge(u[iφ,1],u[ip,1],data)
+	q2=spacecharge(u[iφ,2],u[ip,2],data)
+	f[ip]=(u[ip,1]-u[ip,2]) + (u[iφ,1]-u[iφ,2])*(q1+q2)/(2*data.pscale)
+end;
+
+# ╔═╡ 7bf3a130-3b47-428e-916f-4a0ec1237844
+function create_equilibrium_pp_system(grid,
+		 data::EquilibriumData=default_data();
+		 Γ_bulk=0)
+	update_derived!(data)
+
+	sys=VoronoiFVM.System(grid;data=data,flux=poisson_and_p_flux!,
+		reaction=spacecharge!,species=[iφ,ip])
+	if Γ_bulk>0
+		logysum!(y,p)=y[1]=log(MultECatJulia.ysum(0.0,p[1],data))
+		res=nlsolve(logysum!,[0.0];autodiff=:forward,method=:newton)
+		
+		boundary_dirichlet!(sys,iφ,Γ_bulk,0.0)
+		boundary_dirichlet!(sys,ip,Γ_bulk,res.zero[1])
+	end
+	apply_voltage!(sys,0)
+end;
+
+# ╔═╡ 48670f54-d303-4c3a-a191-06e6592a2e0a
+function ysum(sys,sol)
+	data=sys.physics.data
+	n=size(sol,2)
+	sumy=zeros(n)
+	for i=1:n
+		sumy[i]=ysum(sol[iφ,i],sol[ip,i],data)
+	end
+	sumy
+end
+
+# ╔═╡ 042a452a-1130-4a56-a1b9-b2674803e445
+function spacecharge_and_ysum!(f,u,node,data)
+	φ=u[iφ]
+	p=u[ip]
+	f[iφ]=-spacecharge(φ,p,data)
+	f[ip]=log(ysum(φ,p,data)) # this behaves much better with Newton's method
+end;
+
+# ╔═╡ 6e3dbf34-c1c9-460b-9546-b2ee8ee99d68
+function create_equilibrium_system(grid,
+	data::EquilibriumData=default_data();
+	Γ_bulk=0)
+	update_derived!(data)
+     sys=VoronoiFVM.System(grid,
+		        data=data,
+	             flux=poisson_flux!,
+                 reaction=spacecharge_and_ysum!,
+		 species=[iφ,ip]
+	)
+	if Γ_bulk>0
+    	boundary_dirichlet!(sys,iφ,Γ_bulk,0.0)
+	end
+    apply_voltage!(sys,0)
+end;
+
+# ╔═╡ 49466829-9459-4dc8-85cc-c67460e290d2
+calc_QBL(sol,sys)=VoronoiFVM.integrate(sys,spacecharge_and_ysum!,sol)[iφ,1]
+
 # ╔═╡ 77f49da5-ffd2-4148-93a6-f45382ba6d91
 function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
 	          verbose=false,max_lureuse=0)
@@ -611,14 +690,14 @@ function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
     c.max_round=3
     c.damp_initial=0.01
     c.damp_growth=2
-    c.umfpack_pivot_tolerance=0.5
     
     inival=unknowns(sys,inival=0)
     inival=solve(inival,sys,control=c)
     vstep=vmax/(nsteps-1)
     
     c.damp_initial=1
-    function rundlcap(dir)
+
+	function rundlcap(dir)
 	volts=zeros(0)
 	caps=zeros(0)
 	sol=copy(inival)
@@ -626,25 +705,14 @@ function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
 	volt=0.0
 	for iv=1:nsteps
 	    apply_voltage!(sys,volt)
-	    verbose && println("bias:")
 	    c.damp_initial=1
 	    solve!(sol,oldsol,sys,control=c)
-	    verbose && @show norm(sol-oldsol,Inf)
 	    oldsol.=sol
             
-	    if false
-		verbose && println("biasx:")
-		c.damp_initial=1
-		solve!(sol,oldsol,sys,control=c)
-		verbose && @show norm(sol-oldsol,Inf)
-		oldsol.=sol
-	    end
 	    Q=calc_QBL(sol,sys)
 	    apply_voltage!(sys,volt+dir*δV)
-		verbose && println("dlcap:")
 	    c.damp_initial=1
 	    solve!(sol,oldsol,sys,control=c)
-	    verbose && @show norm(sol-oldsol,Inf)
 	    oldsol.=sol
 	    Qδ=calc_QBL(sol,sys)
 	    push!(caps,(Q-Qδ)/(dir*δV))
@@ -669,13 +737,8 @@ end
 # ╠═085fec09-8172-49ad-8773-8983e08037b8
 # ╠═98de8928-5598-4497-8de8-fcc63a7946bc
 # ╟─7d77ad32-3df6-4243-8bad-b8df4126e6ea
-# ╠═95223d5c-dc7e-4124-9a69-4fb4d2c07b80
 # ╟─4cabef42-d9f9-43fe-988e-7b54462dc775
-# ╠═86a7e69b-20f1-43d4-988f-3b9e5a603478
 # ╠═0d825f88-cd67-4368-90b3-29f316b72e6e
-# ╟─308b8da3-21bd-499b-8e19-214ef74525d8
-# ╠═5cd5a8a9-ad67-42d9-a998-34c038ef9688
-# ╠═40f900c7-e889-4de4-b820-85ae1255bc40
 # ╠═75d44285-113d-4f62-a704-a0ee038be1f2
 # ╟─30c6a176-935b-423f-9447-86f78746322f
 # ╠═00e536dc-34aa-4a1a-93de-4eb3f5e0a348
@@ -701,10 +764,14 @@ end
 # ╟─2e11ce81-7d0d-498f-9ddd-7d4d836ab42f
 # ╟─b1e062c6-f245-4edc-aa02-871e2c776998
 # ╟─c4cc940c-74aa-45f8-a2fa-6016d7c3c145
+# ╠═b07246b8-aec5-4161-8879-8cefb350aced
+# ╟─b41838bb-3d5b-499c-9eb5-137c252ae366
+# ╠═a468f43a-aa20-45dc-9c21-77f5adf2d700
 # ╟─978bf1d3-4758-4d01-b1e5-8aed1db9024f
 # ╠═042a452a-1130-4a56-a1b9-b2674803e445
 # ╟─13fc2859-496e-4f6e-8b22-36d9d55768b8
 # ╠═32db42f3-5084-4908-9b53-59291b6133c5
+# ╠═3d9a47b8-2754-4a21-84a4-39cbeab12286
 # ╟─243d27b5-a1b8-4127-beec-d5643ad07855
 # ╟─005289e8-6979-49fe-b20f-66afd207baea
 # ╟─cbd3fbab-e95a-41d1-98c2-3cd8aec9ce18
@@ -714,8 +781,6 @@ end
 # ╠═6e3dbf34-c1c9-460b-9546-b2ee8ee99d68
 # ╟─c8822d32-affe-473e-8dbf-84aa83b3580c
 # ╠═d885ac23-ddfa-495c-b93b-54032c8a5c1f
-# ╟─768c3dcd-6832-4270-aa3e-0849c7a0095d
-# ╠═85fa321c-dd93-4ac3-96da-1e1bff80970a
 # ╟─93428d11-a3dc-4e29-ae6d-48ba37082c74
 # ╟─7020a6f3-f49d-4fa3-bae2-2a6dad8a1fcd
 # ╠═f3279037-01ed-4596-8e5a-86afe4c02c5f
@@ -723,10 +788,13 @@ end
 # ╠═2afd54ca-4240-4f07-b38a-242ba0485b45
 # ╟─55bd7b9a-a191-4a0b-9c6b-13733be5023e
 # ╠═3ceda3b1-bf1c-4126-b94f-2ee03e8dde99
+# ╠═97c5942c-8eb4-4b5c-8951-87ac0c9f396d
 # ╟─0c54efd0-f279-4dc6-8b00-ba092dd13f44
 # ╠═800dfed8-9f29-4138-96f8-e8bf1f2f00e6
+# ╠═24910762-7d56-446b-a758-d8e830fe9a09
 # ╟─9fe3ca93-c051-426e-8b9a-cc59f59319ad
 # ╠═2ee34d76-7238-46c2-94d1-a40d8b017af6
+# ╠═79cc671b-ef6e-42da-8641-61e43f221cb1
 # ╟─f4b2f509-0769-4df7-956e-e8bfc9ccd89a
 # ╠═49466829-9459-4dc8-85cc-c67460e290d2
 # ╟─65955950-2879-4b8c-bf73-d63e07d2ad96
@@ -734,3 +802,10 @@ end
 # ╟─77f913ea-f89f-48f6-9dd2-e7cd0b6150b6
 # ╟─bb6ef288-373f-4944-bc85-37ab327dc4d5
 # ╠═77f49da5-ffd2-4148-93a6-f45382ba6d91
+# ╟─7a607454-7b75-4313-920a-2dbdad258015
+# ╟─9cb8324c-896f-40f8-baa8-b7d47a93e9f5
+# ╠═003a5c0b-17c7-4407-ad23-21c0ac000fd4
+# ╠═e1c13f1e-5b67-464b-967b-25e3a93e33d9
+# ╠═64e47917-9c61-4d64-a6a1-c6e8c7b28c59
+# ╠═7bf3a130-3b47-428e-916f-4a0ec1237844
+# ╠═48670f54-d303-4c3a-a191-06e6592a2e0a
