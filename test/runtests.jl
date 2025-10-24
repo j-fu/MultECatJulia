@@ -5,5 +5,5 @@ using MySubPackage
 MultECatJulia.greet()
 
 @testset "MultECatJulia" begin
-@test true
+    @test true
 end

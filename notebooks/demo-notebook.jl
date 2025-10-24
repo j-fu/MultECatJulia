@@ -5,13 +5,13 @@ using Markdown
 using InteractiveUtils
 
 # ╔═╡ 60941eaa-1aea-11eb-1277-97b991548781
-begin 
-	using Pkg
-	Pkg.activate(joinpath(@__DIR__,".."))
-	using Revise
-	using PlutoUI
-	using MultECatJulia
-	using MySubPackage
+begin
+    using Pkg
+    Pkg.activate(joinpath(@__DIR__, ".."))
+    using Revise
+    using PlutoUI
+    using MultECatJulia
+    using MySubPackage
 end
 
 # ╔═╡ 882dda23-63b9-4b1e-a04e-69071deff69a
