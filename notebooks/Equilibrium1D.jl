@@ -117,7 +117,7 @@ inival = unknowns(sys_sy, inival = 0);
 
 # ╔═╡ 7899d9b8-0edc-443f-a5a9-96a01187ff74
 md"""
-Change applied voltage. $(@bind voltage confirm(PlutoUI.Slider(-Vmax:0.05:Vmax,show_value=true,default=0)))
+Change applied voltage. $(@bind voltage PlutoUI.Slider(-Vmax:0.05:Vmax,show_value=true,default=0))
 """
 
 # ╔═╡ 9545c38c-35d4-4adf-bd80-82af84e93564
@@ -145,27 +145,43 @@ cmol = calc_cmol(sol_pp, sys_pp)
 # ╔═╡ 10c87e6d-4485-4d17-b7f2-8ead685e17f4
 q = calc_QBL(sol_pp, sys_pp)
 
-# ╔═╡ 1765d933-c6a4-4302-b19e-98d27954c0b4
+# ╔═╡ 483cfd1f-ff0d-4095-93fd-63c793cd2d03
 function plotsol(sol, sys)
-    vis = GridVisualizer(resolution = (600, 200), legend = :rt)
-    scalarplot!(vis, grid, calc_φ(sol, sys), xlimits = (0, 5 * nm), color = :green, clear = true, label = "φ/V")
-    scalarplot!(vis, grid, cmol[iA, :], color = :blue, clear = false, label = "c_A/(mol/L)")
-    scalarplot!(vis, grid, cmol[iC, :], color = :red, clear = false, label = "c_C/(mol/L)")
-    scalarplot!(
-        vis, grid, clear = false, calc_p(sol, sys) / SI(u"GPa"), color = :magenta, label = "p/GPa",
-        title = "φ_0=$(voltage)", ylabel = ""
-    )
-    return reveal(vis)
-end;
+    X = grid[Coordinates][1, :]
+    fig = Figure(size = (600, 400))
+    ax1l = Axis(fig[1, 1], xlabel = "x/nm", ylabel = "ϕ/V")
+    ax1r = Axis(fig[1, 1], yaxisposition = :right, ylabel = "p/GPa")
+    ylims!(ax1l, (-2, 2))
+    ylims!(ax1r, (0, 10))
+    xlims!(ax1l, (0, 5))
+    xlims!(ax1r, (0, 5))
+    data = [
+        lines!(ax1l, X / nm, calc_φ(sol, sys), linewidth = 2, color = :green)
+        lines!(
+            ax1r, X / nm, calc_p(sol, sys) / SI(u"GPa"), label = "ϕ", linewidth = 2,
+            color = :magenta
+        )
+    ]
+    axislegend(ax1l, data, ["ϕ", "p"], position = :ct, backgroundcolor = :transparent)
+
+
+    ax2l = Axis(fig[2, 1], xlabel = "x/nm", ylabel = "c/(mol/L)", yscale = log10)
+    xlims!(ax2l, (0, 5))
+    ylims!(ax2l, (1.0e-4, 100))
+
+    data = [
+        lines!(ax2l, X / nm, cmol[iA, :], color = :blue, linewidth = 2)
+        lines!(ax2l, X / nm, cmol[iC, :], color = :red, linewidth = 2)
+    ]
+    axislegend(ax2l, data, ["c_A/(mol/L)", "c_C/(mol/L)"], position = :rb, backgroundcolor = :transparent)
+    return fig
+end
 
 # ╔═╡ dcec8754-282f-42c5-9a27-39c07f735af7
 plotsol(sol_sy, sys_sy)
 
-# ╔═╡ a95d311c-7f31-456b-974f-526948eef169
-scalarplot(
-    grid, ysum(sys_pp, sol_pp), xlimits = (0, 5nm), limits = (0.975, 1.025),
-    title = "Molar fraction sum constraint for pressure Poisson at $(voltage)V"
-)
+# ╔═╡ 8d7a60b3-a8ea-49c5-9355-2007f0c6f724
+pp_constraint = ysum(sys_pp, sol_pp) |> extrema
 
 # ╔═╡ 768bc478-339f-4bb5-8736-e0377d219744
 md"""
@@ -240,8 +256,8 @@ capsplot(sys_pp, molarities)
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
 # ╠═dcec8754-282f-42c5-9a27-39c07f735af7
 # ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
-# ╠═1765d933-c6a4-4302-b19e-98d27954c0b4
-# ╠═a95d311c-7f31-456b-974f-526948eef169
+# ╠═483cfd1f-ff0d-4095-93fd-63c793cd2d03
+# ╠═8d7a60b3-a8ea-49c5-9355-2007f0c6f724
 # ╟─768bc478-339f-4bb5-8736-e0377d219744
 # ╠═c20f9bde-5ff5-47fe-b543-758159f8add5
 # ╠═d176f826-b8ec-4bdf-b75f-55f96e596a34

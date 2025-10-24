@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.4
+# v0.20.19
 
 using Markdown
 using InteractiveUtils
@@ -14,8 +14,8 @@ begin
         using ExtendableGrids
         using LinearAlgebra
         using Unitful
-        using NLsolve
         using Parameters
+        using NLsolve
         using PhysicalConstants.CODATA2018
     end
     # If not run in Pluto, this file is included in MultECatJulia.jl as part of the package.
@@ -107,7 +107,8 @@ md"""
 function set_molarity!(data, M_E)
     n_E = M_E * mol / L
     data.molarity = n_E
-    return data.n_E = [n_E, n_E]
+    data.n_E = [n_E, n_E]
+    return nothing
 end
 
 # ╔═╡ a21545da-3b53-47af-b0c4-f253b37dc84f
@@ -198,7 +199,8 @@ VoronoiFVM flux function for left hand side of Poisson equation
 
 # ╔═╡ 0e2d20a1-5f26-4263-9a91-3b40b2c2996a
 function poisson_flux!(f, u, edge, data)
-    return f[iφ] = (1.0 + data.χ) * ε_0 * (u[iφ, 1] - u[iφ, 2])
+    f[iφ] = (1.0 + data.χ) * ε_0 * (u[iφ, 1] - u[iφ, 2])
+    return nothing
 end;
 
 # ╔═╡ 824c610b-6e5e-48a3-be37-19104f52d1d9
@@ -319,7 +321,7 @@ function derived(κ, v0, n_E, T)
 end;
 
 # ╔═╡ 0d825f88-cd67-4368-90b3-29f316b72e6e
-@with_kw mutable struct EquilibriumData
+Base.@kwdef mutable struct EquilibriumData
     N::Int64 = 2                     # number of ionic species
     T::Float64 = 298.15 * SI(Unitful.K)  # temperature
     p_ref::Float64 = 1.0e5 * SI(Unitful.Pa)  # referece pressure
@@ -359,7 +361,8 @@ end
 function update_derived!(data)
     @unpack κ, v0, n_E, T = data
     v, y_E, y0_E, U_T = derived(κ, v0, n_E, T)
-    return @pack! data = v, y_E, y0_E, U_T
+    @pack! data = v, y_E, y0_E, U_T
+    return nothing
 end
 
 
@@ -579,7 +582,7 @@ md"""
 
 # ╔═╡ 9cb8324c-896f-40f8-baa8-b7d47a93e9f5
 md"""
-An alternaive possibility to handle the pressure has been introduced in 
+An alternative possibility to handle the pressure has been introduced in 
 
 [J. Fuhrmann, “Comparison and numerical treatment of generalised Nernst–Planck models,” Computer Physics Communications, vol. 196, pp. 166–178, 2015.](https://dx.doi.org/10.1016/j.cpc.2015.06.004).
 
@@ -606,7 +609,8 @@ The bulk Dirichlet boundary condition for the pressure is necessary to make the 
 function spacecharge!(f, u, node, data)
     φ = u[iφ]
     p = u[ip]
-    return f[iφ] = -spacecharge(u[iφ], u[ip], data)
+    f[iφ] = -spacecharge(u[iφ], u[ip], data)
+    return nothing
 end;
 
 # ╔═╡ 64e47917-9c61-4d64-a6a1-c6e8c7b28c59
@@ -654,7 +658,8 @@ function spacecharge_and_ysum!(f, u, node, data)
     φ = u[iφ]
     p = u[ip]
     f[iφ] = -spacecharge(φ, p, data)
-    return f[ip] = log(ysum(φ, p, data)) # this behaves much better with Newton's method
+    f[ip] = log(ysum(φ, p, data)) # this behaves much better with Newton's method
+    return nothing
 end;
 
 # ╔═╡ 6e3dbf34-c1c9-460b-9546-b2ee8ee99d68
@@ -811,7 +816,7 @@ end
 # ╠═77f49da5-ffd2-4148-93a6-f45382ba6d91
 # ╟─7a607454-7b75-4313-920a-2dbdad258015
 # ╟─9cb8324c-896f-40f8-baa8-b7d47a93e9f5
-# ╠═003a5c0b-17c7-4407-ad23-21c0ac000fd4
+# ╟─003a5c0b-17c7-4407-ad23-21c0ac000fd4
 # ╠═e1c13f1e-5b67-464b-967b-25e3a93e33d9
 # ╠═64e47917-9c61-4d64-a6a1-c6e8c7b28c59
 # ╠═7bf3a130-3b47-428e-916f-4a0ec1237844
