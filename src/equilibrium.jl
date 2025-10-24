@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -671,11 +671,11 @@ function create_equilibrium_system(grid,
 end;
 
 # ╔═╡ 49466829-9459-4dc8-85cc-c67460e290d2
-calc_QBL(sol,sys)=VoronoiFVM.integrate(sys,spacecharge_and_ysum!,sol)[iφ,1]
+calc_QBL(sol,sys)=sum(VoronoiFVM.integrate(sys,spacecharge_and_ysum!,sol)[iφ,:])
 
 # ╔═╡ 77f49da5-ffd2-4148-93a6-f45382ba6d91
 function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
-	          verbose=false,max_lureuse=0)
+	          verbose=false)
     data=sys.physics.data
     set_molarity!(data,molarity)
     update_derived!(data)
@@ -684,14 +684,13 @@ function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
     c=VoronoiFVM.NewtonControl()
     #	c.damp_growth=1.1
     c.verbose=verbose
-    c.max_lureuse=max_lureuse
     c.tol_round=1.0e-10
     c.max_round=3
     c.damp_initial=0.01
     c.damp_growth=2
     
     inival=unknowns(sys,inival=0)
-    inival=solve(inival,sys,control=c)
+    inival=solve(sys; inival, control=c)
     vstep=vmax/(nsteps-1)
     
     c.damp_initial=1
@@ -705,13 +704,13 @@ function calc_Cdl(sys;vmax=2*V,molarity=1,nsteps=21, δV=1.0e-3*V,
 	for iv=1:nsteps
 	    apply_voltage!(sys,volt)
 	    c.damp_initial=1
-	    solve!(sol,oldsol,sys,control=c)
+	    sol=solve(sys; inival=oldsol,control=c)
 	    oldsol.=sol
             
 	    Q=calc_QBL(sol,sys)
 	    apply_voltage!(sys,volt+dir*δV)
 	    c.damp_initial=1
-	    solve!(sol,oldsol,sys,control=c)
+	    sol=solve(sys; inival=oldsol,control=c)
 	    oldsol.=sol
 	    Qδ=calc_QBL(sol,sys)
 	    push!(caps,(Q-Qδ)/(dir*δV))

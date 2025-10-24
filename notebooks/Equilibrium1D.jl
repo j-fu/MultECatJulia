@@ -1,17 +1,19 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.20.19
 
 using Markdown
 using InteractiveUtils
 
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
-    quote
+    #! format: off
+    return quote
         local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
+    #! format: on
 end
 
 # ╔═╡ 60941eaa-1aea-11eb-1277-97b991548781
@@ -22,20 +24,19 @@ begin
 	using HypertextLiteral
 	using PlutoUI
 	using ExtendableGrids
-	using PyPlot
+	using CairoMakie
 	using GridVisualize
 	using NLsolve
 	using VoronoiFVM
 	import DrWatson: plotsdir
 	using Colors
 	using MultECatJulia
-	PyPlot.svg(true)
 end
 
 # ╔═╡ 14f8c67a-759a-4646-811c-01d03e3cf726
 if isdefined(Main,:PlutoRunner)
 	using PlutoVista
-	default_plotter!(PlutoVista)	
+	default_plotter!(CairoMakie)	
 end
 
 # ╔═╡ b43533f6-a948-418c-8539-2d54aa8e5943
@@ -114,12 +115,9 @@ sys_pp=create_equilibrium_pp_system(grid,data,Γ_bulk=2)
 # ╔═╡ 1ab27251-0999-49a7-a970-29e70d8fd800
 inival=unknowns(sys_sy,inival=0);
 
-# ╔═╡ fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-vis=GridVisualizer(resolution=(600,200),legend=:rt,Plotter=PlutoVista,limits=(-60,60));vis
-
 # ╔═╡ 7899d9b8-0edc-443f-a5a9-96a01187ff74
 md"""
-Change applied voltage. $(@bind voltage confirm(Slider(-Vmax:0.05:Vmax,show_value=true,default=0)))
+Change applied voltage. $(@bind voltage confirm(PlutoUI.Slider(-Vmax:0.05:Vmax,show_value=true,default=0)))
 """
 
 # ╔═╡ 9545c38c-35d4-4adf-bd80-82af84e93564
@@ -128,8 +126,9 @@ begin
 	apply_voltage!(sys_pp,voltage)
 	sol_sy=solve(sys_sy,inival=inival,log=true)
 	sol_pp=solve(sys_pp,inival=inival,log=true)
-	hist_sy=history(sys_sy)
-	hist_pp=history(sys_pp)
+	hist_sy=history(sol_sy)
+	hist_pp=history(sol_pp)
+
 end
 
 # ╔═╡ 5e4623cc-af45-4b48-a761-666dd0d98427
@@ -146,11 +145,9 @@ cmol=calc_cmol(sol_pp,sys_pp)
 # ╔═╡ 10c87e6d-4485-4d17-b7f2-8ead685e17f4
 q=calc_QBL(sol_pp,sys_pp)
 
-# ╔═╡ fc825252-9462-4a42-bd60-ee3795943285
-vis1=GridVisualizer(resolution=(600,200),legend=:rt);vis1
-
 # ╔═╡ 1765d933-c6a4-4302-b19e-98d27954c0b4
-function plot!(vis,sol,sys)
+function plotsol(sol,sys)
+	vis=GridVisualizer(resolution=(600,200),legend=:rt)
 	scalarplot!(vis,grid,calc_φ(sol,sys),xlimits=(0,5*nm),color=:green,clear=true,label="φ/V")
 	scalarplot!(vis,grid,cmol[iA,:],color=:blue,clear=false,label="c_A/(mol/L)")
 	scalarplot!(vis,grid,cmol[iC,:],color=:red,clear=false,label="c_C/(mol/L)")
@@ -160,10 +157,10 @@ function plot!(vis,sol,sys)
 end;
 
 # ╔═╡ dcec8754-282f-42c5-9a27-39c07f735af7
-plot!(vis,sol_sy,sys_sy)
+plotsol(sol_sy,sys_sy)
 
 # ╔═╡ a95d311c-7f31-456b-974f-526948eef169
-scalarplot!(vis1,grid,ysum(sys_pp,sol_pp),xlimits=(0,5nm),limits=(0.975,1.025),show=true,
+scalarplot(grid,ysum(sys_pp,sol_pp),xlimits=(0,5nm),limits=(0.975,1.025),
 	title="Molar fraction sum constraint for pressure Poisson at $(voltage)V")
 
 # ╔═╡ 768bc478-339f-4bb5-8736-e0377d219744
@@ -176,8 +173,7 @@ molarities=[0.001,0.01,0.1,1]
 
 # ╔═╡ d176f826-b8ec-4bdf-b75f-55f96e596a34
 function capsplot(sys,molarities)
-	vis=GridVisualizer(resolution=(500,300),legend=:rt,clear=true,xlabel="φ/V",ylabel="C_dl/(μF/cm^2)",
-		Plotter=PyPlot)
+	vis=GridVisualizer(resolution=(600,400),legend=:rt,clear=true,xlabel="φ/V",ylabel="C_dl/(μF/cm^2)")
 	hmol=1/length(molarities)
 	for imol=1:length(molarities)
 		c=RGB(1-imol*hmol,0,imol*hmol)
@@ -189,7 +185,7 @@ function capsplot(sys,molarities)
 		scalarplot!(vis,[0],[cdl0]/(μF/cm^2),
 			clear=false,markershape=:circle,label="")
 	end
-	save(plotsdir("1DResults.pdf"),vis)
+	GridVisualize.save(plotsdir("1DResults.pdf"),vis)
 	reveal(vis)
 end
 
@@ -234,11 +230,9 @@ capsplot(sys_pp,molarities)
 # ╟─5e4623cc-af45-4b48-a761-666dd0d98427
 # ╠═11e94e40-fbcf-4d03-ab86-09cc2e75c5c4
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
-# ╟─fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-# ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
-# ╠═fc825252-9462-4a42-bd60-ee3795943285
-# ╠═1765d933-c6a4-4302-b19e-98d27954c0b4
 # ╠═dcec8754-282f-42c5-9a27-39c07f735af7
+# ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
+# ╠═1765d933-c6a4-4302-b19e-98d27954c0b4
 # ╠═a95d311c-7f31-456b-974f-526948eef169
 # ╟─768bc478-339f-4bb5-8736-e0377d219744
 # ╠═c20f9bde-5ff5-47fe-b543-758159f8add5

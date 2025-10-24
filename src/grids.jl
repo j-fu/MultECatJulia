@@ -117,21 +117,29 @@ end
 """
 	polycrystal_grid2d(;W=50*nm,
 		                H=10*nm, 
+                        Hdl=2nm,
                         hgmin=0.5*nm, 
                         hzmin=0.1*nm,
-                        hzmax=2*nm,
+                        hzmax=1.5*nm,
                         ngrain=5)
 
 Create 2D grid for polycrystal surface.
 Keyword arguments:
 - W: Domain width (electrode width) 
 - H: Domain height
+- Hdl: Double layer subdomain  height
 - hzmin: grid z resolution at electrode
 - hzmax: grid z resolution in bulk
 - hgmin: grid x resolution at grain boundary
 - ngrain: number of grains
 """
-function polycrystal_grid2d(;W=50*nm,H=10*nm, hgmin=0.5*nm, hzmin=0.1*nm,hzmax=2*nm,ngrain=5)
+function polycrystal_grid2d(;W=50*nm,
+                            H=10*nm,
+                            Hdl=1.5*nm,
+                            hgmin=0.5*nm,
+                            hzmin=0.1*nm,
+                            hzmax=2*nm,
+                            ngrain=5)
     if ngrain==1
 	Xgrain=range(0,W,length=5)
 	Wgrain=W
@@ -146,6 +154,7 @@ function polycrystal_grid2d(;W=50*nm,H=10*nm, hgmin=0.5*nm, hzmin=0.1*nm,hzmax=2
     end
     Z=geomspace(0,H,hzmin,hzmax)
     grid=simplexgrid(Xgrain,Z)
+    cellmask!(grid,[0,0],[W,Hdl],2)
     bfacemask!(grid,[0,0],[W,H],allow_new=false,ngrain+2)
     bfacemask!(grid,[0,H],[W,H],allow_new=false,ngrain+1)
     if ngrain==1

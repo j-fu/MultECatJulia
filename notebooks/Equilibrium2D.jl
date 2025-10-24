@@ -1,17 +1,19 @@
 ### A Pluto.jl notebook ###
-# v0.18.0
+# v0.20.19
 
 using Markdown
 using InteractiveUtils
 
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
-    quote
+    #! format: off
+    return quote
         local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
         global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
+    #! format: on
 end
 
 # ╔═╡ 60941eaa-1aea-11eb-1277-97b991548781
@@ -22,13 +24,16 @@ begin
 	using PlutoUI
 	using ExtendableGrids
 	using PlutoVista
+	using DrWatson: plotsdir
 	using VoronoiFVM
 	using GridVisualize
-	using PyPlot
+		using PhysicalConstants.CODATA2018
+
+	import CairoMakie
+	using LaTeXStrings
 	using Colors
 	using HypertextLiteral
-	default_plotter!(PlutoVista)
-	PyPlot.svg(true)
+	default_plotter!(CairoMakie)
 	using MultECatJulia
 end
 
@@ -36,11 +41,18 @@ end
 begin
 	using Unitful
 	SI(x)=Float64(Unitful.ustrip(Unitful.upreferred(1*x)));
+		const N_A=SI(AvogadroConstant)
+
 	const V=SI(Unitful.V)
+	const C=SI(Unitful.C)
 	const eV=SI(Unitful.eV)
 	const nm=SI(Unitful.nm)
 	const cm=SI(Unitful.cm)
 	const μF=SI(Unitful.μF)
+		const L=SI(Unitful.L)
+
+		const mol=N_A
+
 end
 
 # ╔═╡ 882dda23-63b9-4b1e-a04e-69071deff69a
@@ -80,7 +92,10 @@ hgmin=min(0.5*nm,Width/(15*ngrain))
 grid=polycrystal_grid2d(ngrain=ngrain,W=Width,hgmin=hgmin,H=10nm,hzmax=1nm)
 
 # ╔═╡ 2fdef862-536a-4401-8b5c-bc7e80b6a224
-gridplot(grid,resolution=(600,300),gridscale=1/1nm,zoom=2)
+gridplot(grid,resolution=(600,300),gridscale=1/1nm,zoom=3, linewidth=0.1)
+
+# ╔═╡ c6067d85-41c6-43c8-be60-17cf94dff2b4
+grid[CellRegions] |> extrema
 
 # ╔═╡ 1263e426-c510-47d4-a0c3-6023cf98c11f
 md"""
@@ -108,8 +123,8 @@ sys= ppoisson ? create_equilibrium_pp_system(grid,data;Γ_bulk=ngrain+1) : creat
 # ╔═╡ 1ab27251-0999-49a7-a970-29e70d8fd800
 inival=unknowns(sys,inival=0);
 
-# ╔═╡ fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-vis=GridVisualizer(resolution=(600,200),legend=:rt,dim=2);vis
+# ╔═╡ b3e6eabf-5e9a-41eb-9ad5-0c823edffe01
+plot_fullgrid=false
 
 # ╔═╡ 7899d9b8-0edc-443f-a5a9-96a01187ff74
 md"""
@@ -120,7 +135,7 @@ Change applied voltage: $(@bind voltage Slider(-Vmax:0.05:Vmax, show_value=true,
 begin
 	apply_voltage!(sys,voltage)
 	sol=solve(sys,inival=inival,log=true,damp_initial=0.1)
-	hist=history(sys)
+	hist=history(sol)
 end
 
 # ╔═╡ 5e4623cc-af45-4b48-a761-666dd0d98427
@@ -132,10 +147,39 @@ cmol=calc_cmol(sol,sys)
 # ╔═╡ 10c87e6d-4485-4d17-b7f2-8ead685e17f4
 q=calc_QBL(sol,sys)
 
+# ╔═╡ ad87c830-41cf-4a77-b200-5ad08dbe1251
+begin
+	n=size(sol,2)
+    qdensity=zeros(n)
+	for i=1:n
+		qdensity[i]=MultECatJulia.spacecharge(sol[iφ,i],sol[ip,i],data)
+	end
+    qdensity
+end
+
+# ╔═╡ 8b6d6ef7-282c-49ba-9ad4-c33ac72b6833
+begin
+	if plot_fullgrid
+	  plotgrid=grid
+	  plotϕ=calc_φ(sol,sys)
+		plotqd=qdensits
+	else
+		plotgrid=subgrid(grid,[2])
+		plotϕ=view(calc_φ(sol,sys), plotgrid)
+		plotqd=view(qdensity, plotgrid)
+	end
+end
+
 # ╔═╡ 1765d933-c6a4-4302-b19e-98d27954c0b4
 let
-	
-	scalarplot!(vis,grid,calc_φ(sol,sys),clear=true,label="φ/V",gridscale=1/nm,zoom=3,colormap=:bwr,levels=9,limits=(-Vmax,Vmax))
+	vis=GridVisualizer(resolution=(600,400),legend=:rt,dim=2, linewidth=0.5, layout=(2,1),xlabel="x/nm", ylabel="y/nm")
+	scalarplot!(vis[1,1],plotgrid,plotϕ,clear=true,label="φ/V",gridscale=1/nm,zoom=3,colormap=:bwr,levels=9,limits=(-Vmax,Vmax),aspect=6,
+			   title=L"\fontfamily{TeXGyreHeros}\mathrm{Potential}\; ϕ/V")
+	scalarplot!(vis[2,1], plotgrid,plotqd/(C/cm^3);gridscale=1/nm,
+			   limits=(-5e2, 5e2),
+				colormap=:bwr, aspect=6,
+				title = L"\fontfamily{TeXGyreHeros}\mathrm{Charge\; density\;} q/(C/cm^3)"
+			   )
 	reveal(vis)
 end
 
@@ -148,7 +192,7 @@ md"""
 nsteps=25
 
 # ╔═╡ fd0c34b7-1b52-4430-86c6-dc4f3cb4f1b6
-@bind run CheckBox()
+@bind run2d CheckBox()
 
 # ╔═╡ c20f9bde-5ff5-47fe-b543-758159f8add5
 molarity=0.025
@@ -158,9 +202,9 @@ set_molarity!(data,molarity);L_Debye(data)/nm
 
 # ╔═╡ 2d0ca845-f24b-4970-94c0-c78c19939362
 V2d,C2d=let
-	if run
+	if run2d
 	calc_Cdl(sys,vmax=Vmax,nsteps=50,molarity=molarity,verbose=false,
-		δV=1.0e-6*V,max_lureuse=10)
+		δV=1.0e-6*V)
 	else
 	zeros(1),zeros(1)
 		end
@@ -203,14 +247,21 @@ end
 
 # ╔═╡ d176f826-b8ec-4bdf-b75f-55f96e596a34
 let
-	vis=GridVisualizer(resolution=(500,400),legend=:rt)
-	scalarplot!(vis,Vp,Cp/(μF/cm^2),color=:gray80)
-	scalarplot!(vis,Vm,Cm/(μF/cm^2),clear=false,color=:gray80)
-	scalarplot!(vis,V0,C0/(μF/cm^2),clear=false,color=RGB(0.75,0.75,1))
-	scalarplot!(vis,Vm,(Cm+Cp)/2/(μF/cm^2),clear=false,color=:green, label="1d avg")	
+	vis=GridVisualizer(resolution=(500,400),legend=:rt, Plotter=CairoMakie,
+					   ylabel=L"\fontfamily{TeXGyreHeros}C_{dl}/(μF/cm^2)",
+					  xlabel="U/V", 
+					  title="Double layer capacitance"
+					  )
+	scalarplot!(vis,Vp,Cp/(μF/cm^2),color=RGB(1.0, 0.7, 0.7), label=L"μ_E>0" )
+	scalarplot!(vis,Vm,Cm/(μF/cm^2),clear=false,color=RGB(0.7,0.7,1), label=L"μ_E<0")
+	scalarplot!(vis,V0,C0/(μF/cm^2),clear=false,color=:gray90, label=L"μ_E=0")
+	scalarplot!(vis,Vm,(Cm+Cp)/2/(μF/cm^2),clear=false,color=RGB(1,0.0,1.0), label="1d avg")	
 if length(V2d)>1  
-scalarplot!(vis, V2d, (C2d/Width)/(μF/cm^2), color=:red,clear=false,label="2d",markershape=:none)
+scalarplot!(vis, V2d, (C2d/Width)/(μF/cm^2), color=:green,clear=false,label="2d",markershape=:none)
 end
+	if run2d
+	GridVisualize.save(draftplotsdir("2DResults.pdf"),vis)
+	end
 	reveal(vis)
 end
 
@@ -229,6 +280,7 @@ end
 # ╠═3318676c-aefa-4a81-8a79-1a35edf62021
 # ╠═047a8134-c309-4e00-b894-ec1ab78fb282
 # ╠═2fdef862-536a-4401-8b5c-bc7e80b6a224
+# ╠═c6067d85-41c6-43c8-be60-17cf94dff2b4
 # ╟─1263e426-c510-47d4-a0c3-6023cf98c11f
 # ╠═589ed15d-f8af-4921-8e49-82449170ef5a
 # ╟─074dcc08-0fe8-4585-a17b-9133e80b3f4f
@@ -238,8 +290,10 @@ end
 # ╠═5e4623cc-af45-4b48-a761-666dd0d98427
 # ╠═11e94e40-fbcf-4d03-ab86-09cc2e75c5c4
 # ╠═10c87e6d-4485-4d17-b7f2-8ead685e17f4
-# ╠═fcfd99a5-8213-47cc-826f-95b3f3cdb4e8
-# ╟─1765d933-c6a4-4302-b19e-98d27954c0b4
+# ╠═ad87c830-41cf-4a77-b200-5ad08dbe1251
+# ╠═b3e6eabf-5e9a-41eb-9ad5-0c823edffe01
+# ╠═8b6d6ef7-282c-49ba-9ad4-c33ac72b6833
+# ╠═1765d933-c6a4-4302-b19e-98d27954c0b4
 # ╟─7899d9b8-0edc-443f-a5a9-96a01187ff74
 # ╟─768bc478-339f-4bb5-8736-e0377d219744
 # ╠═11a3ebb7-ef4d-4788-a042-96857dacf9c5
